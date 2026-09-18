@@ -22,7 +22,7 @@ V2.4
 
 ```json
 {
-    "api_key": "sk-api-你的密钥",
+    "api_key": "your-minimax-api-key-here",
     "host": "0.0.0.0",
     "port": 8888
 }

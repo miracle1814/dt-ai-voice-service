@@ -23,9 +23,6 @@ python -m PyInstaller --onefile ^
     --name "AI_VoiceService" ^
     --add-data ".;." ^
     --hidden-import faster_whisper ^
-    --hidden-import duckduckgo_search ^
-    --hidden-import ddgs ^
-    --hidden-import primp ^
     --console ^
     --clean ^
     "voice_service.py"
