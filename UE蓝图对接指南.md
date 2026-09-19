@@ -1,5 +1,8 @@
 # UE5 蓝图对接 AI 语音服务指南
 
+> 与 **V2.4** 代码逐字段对齐（2026-09-19 核对）。当前版本服务端返回**文字回复**，
+> 不含 TTS 音频——如需语音播报，见文末「TTS 扩展指引」。
+
 ## 📋 对接概览
 
 ```
@@ -12,23 +15,21 @@ UE5 蓝图                    语音服务 (localhost:8888)
         │                 ┌──────────────────────┐
         │                 │   FastAPI 服务       │
         │                 │                      │
-        │    POST /voice  │  1. Whisper语音识别  │
-        └──────────────→ │  2. MiniMax对话      │
-        │                 │  3. MiniMax TTS      │
+        │    POST /voice  │  1. Whisper 语音识别 │
+        └──────────────→ │  2. LLM 对话（适配器）│
         │                 └──────────────────────┘
         │                          │
         │                          ▼
         │                 ┌──────────────────────┐
-        │   返回JSON:      │  {"success": true,   │
-        │   - user_text   │   "ai_reply": "...",  │
-        │   - ai_reply    │   "audio": "base64"} │
-        │   - audio       └──────────────────────┘
-        ▼                          │
-┌─────────────┐                    │
-│  播放模块    │←──解码──┘
-│  (音频组件)  │
-└─────────────┘
+        │   返回JSON:      │  "success": true,    │
+        │   - user_text   │  "user_text": "...", │
+        │   - ai_reply    │  "ai_reply": "..."   │
+        └─────────────┘    └──────────────────────┘
 ```
+
+> **LLM 厂商无关**：服务端通过适配器调用大模型（OpenAI 兼容格式），
+> `config.json` 里改 `llm_base_url` / `llm_model` / `api_key` 三项即可切换
+> 任意厂商或本地推理（Ollama / vLLM），UE 侧无需任何改动。
 
 ## 🔧 蓝图结构
 
@@ -39,8 +40,8 @@ UE5 蓝图                    语音服务 (localhost:8888)
 | `API_URL` | String | `http://localhost:8888` |
 | `RecordingFile` | String | `temp_recording.wav` (完整路径) |
 | `bIsRecording` | Boolean | 录音状态 |
+| `LastUserText` | String | 识别出的用户语音文本 |
 | `LastAIResponse` | String | AI回复文本 |
-| `LastAudioBase64` | String | 音频数据(Base64) |
 
 ### 2. 录音流程
 
@@ -48,89 +49,53 @@ UE5 蓝图                    语音服务 (localhost:8888)
 ┌────────────────────┐
 │   按下语音按钮      │
 └─────────┬──────────┘
-          │
           ▼
 ┌────────────────────┐
-│   Start Recording   │
-│   (系统组件)        │
+│   Start Recording  │
+│   (系统组件)       │
 └─────────┬──────────┘
-          │
           │ (等待1-3秒)
           ▼
 ┌────────────────────┐
-│   Stop Recording    │
+│   Stop Recording   │
 └─────────┬──────────┘
-          │
           ▼
 ┌────────────────────┐
 │  Save to File      │
 │  temp_recording.wav│
 └─────────┬──────────┘
-          │
           ▼
 ┌────────────────────┐
 │  Call HTTP Request │
-└─────────┬──────────┘
+└────────────────────┘
 ```
 
-### 3. HTTP请求 (Python脚本方式)
+### 3. HTTP 请求（Python 脚本方式，推荐）
 
-由于UE蓝图HTTP功能有限，推荐使用Python插件方式：
-
-#### 方案A：Python HTTP请求 (推荐)
-
-创建 `call_voice_api.py`:
+UE 蓝图的 HTTP 功能有限，推荐经 Python 插件中转。创建 `call_voice_api.py`：
 
 ```python
 import requests
-import base64
 import json
 
 def call_voice_api(wav_path):
     """调用语音服务API"""
     url = "http://localhost:8888/voice"
-    
+
     with open(wav_path, 'rb') as f:
-        # UE中可以通过Form提交
         files = {'audio': f}
         data = {'action': 'start'}
         response = requests.post(url, data=data, files=files)
-    
+
     return response.json()
 
 # 获取结果
 result = call_voice_api("C:/path/to/temp_recording.wav")
-print(result['ai_reply'])  # AI回复文本
-print(result['audio'])     # Base64音频
+print(result['user_text'])  # 识别出的用户语音
+print(result['ai_reply'])   # AI回复文本
 ```
 
-#### 方案B：直接用控制面板
-
-在UE中只需要显示一个内嵌网页，调用控制面板的界面。
-
-### 4. 简化方案：文字交互
-
-如果暂时不用语音，可以用文字方式：
-
-```
-┌─────────────────────┐
-│  用户输入文本        │
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────┐
-│  HTTP POST /chat    │
-│  Body: {"text": "..."}│
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────┐
-│  显示 AI 回复        │
-│  播放 TTS 音频(Base64)│
-└─────────────────────┘
-```
-
-## 📝 具体蓝图节点
+## 📝 端点参考（与 V2.4 代码逐字段核对）
 
 ### 健康检查
 ```
@@ -141,14 +106,14 @@ GET http://localhost:8888/
 ### 语音对话
 ```
 POST http://localhost:8888/voice
-Body: {"action": "start"}
+Body: {"action": "start"}（音频文件为项目根目录的 temp_recording.wav）
 
 响应:
 {
     "success": true,
     "user_text": "用户说的话",
     "ai_reply": "AI的回复",
-    "audio": "Base64编码的MP3音频"
+    "reply": "AI的回复"          ← 历史兼容别名，与 ai_reply 相同
 }
 ```
 
@@ -162,7 +127,7 @@ Body: {"text": "你好"}
     "success": true,
     "user_text": "你好",
     "ai_reply": "你好！有什么可以帮您的？",
-    "audio": ""
+    "audio": ""                   ← 历史遗留字段，恒为空（TTS 未内置）
 }
 ```
 
@@ -174,13 +139,13 @@ POST http://localhost:8888/clear
 
 ## 🎯 快速开始：纯蓝图实现
 
-### 步骤1: 添加HTTP请求组件
-在关卡蓝图中添加 `HTTP Request` 组件
+### 步骤1: 添加 HTTP 请求组件
+在关卡蓝图中添加 `HTTP Request` 组件（或经 Python 中转，见上）
 
 ### 步骤2: 录音
-使用UE的 `Audio Capture` 组件或第三方插件
+使用 UE 的 `Audio Capture` 组件或第三方录音插件
 
-### 步骤3: 调用API
+### 步骤3: 调用 API 并展示
 
 ```
 Event Graph:
@@ -193,38 +158,42 @@ Event Graph:
 │
 ├── On HTTP Response (Success)
 │   ├── Parse JSON
-│   ├── Set AI Reply Text
-│   ├── Play Audio from Base64
+│   ├── Set LastUserText   ← user_text
+│   ├── Set LastAIResponse ← ai_reply
 │   └── Show on UI
 │
 └── On HTTP Response (Failed)
     └── Show Error Message
 ```
 
-### 步骤4: 播放音频
+### 步骤4（可选扩展）: 接入 TTS 播报
 
-Base64音频解码播放：
-```
-Base64 String → Decode → Save as MP3 → Load Sound Wave → Play
-```
+当前服务端返回纯文字。若需语音播报，两条路径：
+
+1. **UE 侧合成**：把 `ai_reply` 交给 UE 的 TTS 插件/第三方语音服务；
+2. **服务端扩展**：仿照 `call_ai_with_history` 的适配器模式，在
+   `voice_service.py` 中新增 TTS 适配器（返回 base64 音频字段），
+   并在蓝图里恢复「解码 → 播放」节点。
 
 ## 🔧 技术问题
 
-### Q: UE无法直接发送multipart/form-data？
-A: 使用Python脚本中转，或使用插件如 `VaRest`
-
-### Q: Base64音频如何播放？
-A: 保存为临时文件后用 `Play Sound at Location` 播放
+### Q: UE 无法直接发送 multipart/form-data？
+A: 使用 Python 脚本中转（上文方案），或使用 `VaRest` 等插件
 
 ### Q: 如何实现按住说话？
 A: 使用 `OnPressed` / `On Released` 事件
 
+### Q: 换大模型厂商要改 UE 侧吗？
+A: 不用。改服务端 `config.json` 的 `llm_base_url` / `llm_model` / `api_key`
+即可，蓝图与 HTTP 契约完全不变。
+
 ## 📂 相关文件
 
 - `voice_service.py` - 语音服务主程序
-- `voice_panel.py` - 控制面板（可用于调试）
-- `UE_Blueprint_Example.uasset` - 蓝图示例（需手动创建）
+- `AI_Chat.py` - 命令行测试工具（先用它验证服务是否正常）
+- `config.example.json` - 配置模板（复制为 config.json 后填入）
 
-## 🚀 推荐：先用控制面板测试
+## 🚀 推荐：先用命令行测试
 
-在UE集成的完整方案完成前，可以先用 `voice_panel.py` 控制面板测试语音对话的完整流程，确认效果后再做UE集成。
+在 UE 集成之前，先用 `python AI_Chat.py` 验证服务与 LLM 适配器工作正常，
+再做 UE 侧集成。

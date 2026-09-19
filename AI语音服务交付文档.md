@@ -30,7 +30,7 @@ V2.4
 
 | 参数 | 说明 |
 |:---|:---|
-| api_key | MiniMax API密钥 |
+| api_key | LLM 适配器 API 密钥 |
 | host | 监听地址（0.0.0.0=所有网卡） |
 | port | 端口号 |
 

@@ -25,9 +25,13 @@ if sys.stderr is None:
 # ============ 配置 ============
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
 
-# 默认配置（api_key 不入库：从 config.json 或环境变量 MINIMAX_API_KEY 读取）
+# 默认配置（api_key 不入库：从 config.json 或环境变量 LLM_API_KEY 读取）
+# LLM 适配器：base_url/model 均可配置 —— 任何 OpenAI 兼容接口（含本地 Ollama/
+# vLLM）改配置即接；默认内置 MiniMax 适配（其 v2 接口为 OpenAI 兼容格式）。
 DEFAULT_CONFIG = {
     "api_key": "",
+    "llm_base_url": "https://api.minimaxi.com/v1/text/chatcompletion_v2",
+    "llm_model": "MiniMax-M2.5",
     "host": "0.0.0.0",
     "port": 8888
 }
@@ -43,13 +47,15 @@ def load_config():
     return DEFAULT_CONFIG
 
 CONFIG = load_config()
-API_KEY = CONFIG.get("api_key") or os.environ.get("MINIMAX_API_KEY", "")
+API_KEY = CONFIG.get("api_key") or os.environ.get("LLM_API_KEY", "")
+LLM_BASE_URL = CONFIG.get("llm_base_url", DEFAULT_CONFIG["llm_base_url"])
+LLM_MODEL = CONFIG.get("llm_model", DEFAULT_CONFIG["llm_model"])
 SERVICE_HOST = CONFIG.get("host", DEFAULT_CONFIG["host"])
 SERVICE_PORT = CONFIG.get("port", DEFAULT_CONFIG["port"])
 
 if not API_KEY:
-    print("[警告] 未配置 MiniMax API Key —— 请复制 config.example.json 为 config.json 并填入，"
-          "或设置环境变量 MINIMAX_API_KEY（/chat /voice 接口将不可用）")
+    print("[警告] 未配置 LLM API Key —— 请复制 config.example.json 为 config.json 并填入，"
+          "或设置环境变量 LLM_API_KEY（/chat /voice 接口将不可用）")
 
 SAMPLE_RATE = 16000
 AUDIO_FILENAME = "temp_recording.wav"
@@ -283,25 +289,29 @@ async def voice_upload(file: UploadFile = File(...)):
         return {"success": False, "error": str(e)}
 
 def call_ai_with_history(text):
-    """带对话历史的AI调用"""
+    """带对话历史的 LLM 调用（厂商适配器）。
+
+    适配契约：POST {llm_base_url}，Bearer 鉴权，请求/响应为 OpenAI 兼容格式
+    （messages / choices[].message.content）。更换厂商 = 改 config 的
+    llm_base_url / llm_model / api_key 三项，无需改代码。
+    """
     global conversation_history
-    url = "https://api.minimaxi.com/v1/text/chatcompletion_v2"
     now = datetime.now()
     weekday = ["周一","周二","周三","周四","周五","周六","周日"][now.weekday()]
     system_prompt = f"你是智能物业管家，简洁友好回复，用中文，禁止使用Markdown格式（如**加粗**）。当前时间：{now.strftime('%Y年%m月%d日 %H:%M')} {weekday}。"
-    
+
     # 构建消息列表
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(conversation_history)
     messages.append({"role": "user", "content": text})
-    
+
     payload = {
-        "model": "MiniMax-M2.5",
+        "model": LLM_MODEL,
         "messages": messages,
         "max_tokens": 300
     }
-    
-    resp = requests.post(url, headers={"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}, json=payload, timeout=30)
+
+    resp = requests.post(LLM_BASE_URL, headers={"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}, json=payload, timeout=30)
     return resp.json().get("choices", [{}])[0].get("message", {}).get("content", "")
 
 @app.post("/clear")
