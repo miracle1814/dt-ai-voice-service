@@ -1,7 +1,31 @@
 {
-    "api_key": "your-llm-api-key-here",
-    "llm_base_url": "https://api.minimaxi.com/v1/text/chatcompletion_v2",
-    "llm_model": "MiniMax-M2.5",
-    "host": "0.0.0.0",
-    "port": 8888
+  "_说明": "复制本文件为 config.json 后填写。config.json 已被 .gitignore 排除，绝不入库。顶层 api_key/host/port 兼容 V2.4 旧写法，推荐用下面的分层结构。",
+  "llm": {
+    "base_url": "https://api.minimaxi.com/v1/text/chatcompletion_v2",
+    "model": "MiniMax-M2.5",
+    "api_key": "你的LLM-API-Key",
+    "max_tokens": 300,
+    "_说明": "任何 OpenAI 兼容接口均可：改 base_url/model 即切换厂商或本地推理（Ollama/vLLM），UE 侧零改动"
+  },
+  "asr": {
+    "provider": "local_whisper",
+    "whisper_model": "base",
+    "language": "zh",
+    "aliyun": {
+      "access_key_id": "",
+      "access_key_secret": "",
+      "app_key": "",
+      "region": "cn-shanghai",
+      "sample_rate": 16000
+    },
+    "_说明": "provider 二选一：local_whisper=本地离线（首次运行自动下载约150MB模型）；aliyun_nls=阿里云一句话识别（需在 aliyun.com 开通智能语音交互并填 AK/AppKey）"
+  },
+  "tts": {
+    "voice": "zh-CN-XiaoxiaoNeural",
+    "auto_speak_on_voice": true,
+    "_说明": "edge-tts 免费在线合成，无需密钥。auto_speak_on_voice=true 时 /voice /voice_upload /voice_base64 的响应直接带 MP3；/chat 默认不出声，body 传 tts:true 可单次开启"
+  },
+  "auto_search": true,
+  "host": "0.0.0.0",
+  "port": 8888
 }
