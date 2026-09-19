@@ -23,6 +23,10 @@ python -m PyInstaller --onefile ^
     --name "AI_VoiceService" ^
     --add-data ".;." ^
     --hidden-import faster_whisper ^
+    --hidden-import asr_engines ^
+    --hidden-import tts_engines ^
+    --hidden-import session_store ^
+    --hidden-import edge_tts ^
     --console ^
     --clean ^
     "voice_service.py"

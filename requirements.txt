@@ -1,4 +1,7 @@
-fastapi>=0.100
-uvicorn>=0.23
-faster-whisper>=1.0
-requests>=2.31
+fastapi>=0.110.0
+uvicorn>=0.29.0
+requests>=2.31.0
+python-multipart>=0.0.9
+edge-tts>=6.1.0
+# ASR 默认引擎（本地离线）。不想装可删掉本行，并把 config.json 的 asr.provider 换成 aliyun_nls
+faster-whisper>=1.0.0
