@@ -21,3 +21,6 @@ config.json
 
 # TTS 合成缓存（运行期自建）
 audio_cache/
+
+# 本地业务标识词库（词本身即隐私，绝不入库）
+scripts/scan_terms.local.txt

@@ -37,8 +37,24 @@ ALLOWLIST_PATTERNS = [
 ALLOWLIST = [re.compile(p, re.I) for p in ALLOWLIST_PATTERNS]
 
 # ---- 永不扫描/永不入库的文件 ----
-SKIP_FILES = {"config.json", ".pwd", "secrets.json", "audio_cache", "__pycache__", ".git"}
+SKIP_FILES = {"config.json", ".pwd", "secrets.json", "audio_cache", "__pycache__", ".git",
+              "scan_terms.local.txt"}  # 本地业务词库自身也要跳过，否则自己扫自己必命中
 SKIP_EXT = {".mp3", ".wav", ".png", ".jpg", ".zip", ".exe", ".onnx", ".bin"}
+
+# ---- 本地业务标识词库（可选，不入库）----
+# 用途：把实际项目独有的业务词（项目名/人名/内部代号等）放在 scripts/scan_terms.local.txt，
+# 每行一个词。本脚本加载它做额外扫描，从而拦截"业务数据/用户信息"入库。
+# 该词库文件已被 .gitignore 排除 —— 词本身也是隐私，绝不随仓库发布。
+LOCAL_TERMS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scan_terms.local.txt")
+
+
+def load_local_terms() -> list:
+    try:
+        with open(LOCAL_TERMS_FILE, "r", encoding="utf-8") as f:
+            terms = [ln.strip() for ln in f if ln.strip() and not ln.startswith("#")]
+        return terms
+    except OSError:
+        return []
 
 
 def iter_files(only_staged: bool):
@@ -62,6 +78,9 @@ def iter_files(only_staged: bool):
 
 
 def scan(only_staged: bool) -> int:
+    local_terms = load_local_terms()
+    if local_terms:
+        print(f"  [i] 已加载本地业务标识词库 {len(local_terms)} 条（不入库）")
     hits = 0
     for rel in iter_files(only_staged):
         try:
@@ -77,11 +96,17 @@ def scan(only_staged: bool) -> int:
                     print(f"  ❌ [{desc}] {rel}:{no}")
                     print(f"     {line.strip()[:110]}")
                     hits += 1
+            for term in local_terms:
+                if term in line:
+                    print(f"  ❌ [业务标识词: {term[:4]}***] {rel}:{no}")
+                    print(f"     {line.strip()[:110]}")
+                    hits += 1
     print("=" * 60)
     if hits:
         print(f"❌ 命中 {hits} 处疑似敏感信息 —— 提交前必须处理（换占位符/移出仓库）")
         return 1
-    print("✅ 未发现敏感信息（规则 %d 条；仅静态扫描，关键文件请再人工过目）" % len(RULES))
+    print("✅ 未发现敏感信息（规则 %d 条 + 本地词库 %d 条；仅静态扫描，关键文件请再人工过目）"
+          % (len(RULES), len(local_terms)))
     return 0
 
 
